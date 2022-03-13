@@ -1,0 +1,20 @@
+{
+	"name": "radoid/phpsocket",
+	"description": "A WebSocket server implemented in PHP language",
+	"minimum-stability": "stable",
+	"license": "MIT",
+	"authors": [
+		{
+			"name": "Ante Radman",
+			"homepage": "https://radoid.com"
+		}
+	],
+	"require": {
+		"php": ">=7.2.0"
+	},
+	"autoload": {
+		"psr-4": {
+			"PhpSocket\\": "src/"
+		}
+	}
+}
