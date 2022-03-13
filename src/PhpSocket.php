@@ -1,4 +1,6 @@
 <?php
+namespace PhpSocket;
+
 /**
  * Implements a WebSocket server
  */
@@ -256,7 +258,7 @@ class PhpSocket {
 	/**
 	 * Constructs a WebSocket frame for a message/data and desired opcode
 	 */
-	private function frame(string $message, int $opcode): string {
+	protected function frame(string $message, int $opcode): string {
 		$b1 = 0x80 | ($opcode & 0x0f);
 		$length = strlen($message);
 		if ($length < 126)

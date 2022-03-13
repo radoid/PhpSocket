@@ -5,7 +5,7 @@ A WebSocket server implemented in PHP language.
 
 ## Instalation
 
-Add the source code into the project via Composer:
+Add the source code to the project via Composer:
 
 	composer require radoid/phpsocket
 
@@ -18,7 +18,7 @@ Then, make sure the Composer's auto-loading mechanism is being used in your proj
 
 The server is instantiated from the `PhpSocket` class. Method `listen()` will start listening for incoming connections on the desired port:
 
-	use Radoid\PhpSocket\PhpSocket;
+	use PhpSocket\PhpSocket;
 
 	$port = 1444;
 	$server = new PhpSocket;
