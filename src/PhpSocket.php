@@ -1,6 +1,8 @@
 <?php
 namespace PhpSocket;
 
+use Throwable;
+
 /**
  * Implements a WebSocket server
  */
@@ -138,7 +140,7 @@ class PhpSocket {
 		if (($answer = $this->handshake($message, $uri, $headers, $cookies))) {
 			if (fwrite($stream, $answer)) {
 				$ipaddr = stream_socket_get_name($stream, true);
-				if ($this->authorize($id, $uri, $headers, $cookies, $ipaddr) !== false) {
+				if ($this->onupgrade($id, $uri, $headers, $cookies, $ipaddr) !== false) {
 					$this->upgrades[$id] = true;
 					$this->onopen($id);
 				} else
@@ -212,7 +214,7 @@ class PhpSocket {
 	/**
 	 * Checks whether the connection is made by a valid user
 	 */
-	protected function authorize(int $id, string $uri, array $headers, array $cookies, string $ipaddr): bool { return true; }
+	protected function onupgrade(int $id, string $uri, array $headers, array $cookies, string $ipaddr): bool { return true; }
 
 	/**
 	 * Fires when a message/data arrives
@@ -233,32 +235,30 @@ class PhpSocket {
 	 * Sends a message/data through a connection
 	 */
 	protected function send(int $id, $message): void {
-		assert($this->streams[$id]);  // TODO privremeno
-		$json = (is_string($message) ? $message : json_encode($message));
-		$blob = $this->frame($json, 1);
-		if (fwrite($this->streams[$id], $blob) === false)
-			$this->disconnect($id);
+		if ($id > 0 && $this->streams[$id]) {
+			$json = (is_string($message) ? $message : json_encode($message));
+			$blob = $this->frame($json, 1);
+			if (fwrite($this->streams[$id], $blob) === false)
+				$this->disconnect($id);
+		}
 	}
 
 	/**
 	 * Terminates a connection
 	 */
 	protected function disconnect(int $id): void {
-		assert($id > 0);  // TODO privremeno
-		assert($this->streams[$id]);  // TODO privremeno
-		//$meta = stream_get_meta_data()shutdown()
-		//@fwrite($this->streams[$id], $this->mask('', 8));  // TODO privremeno
-			@fclose($this->streams[$id]);
-		if ($this->upgrades[$id])
-			$this->onclose($id);
-		unset($this->streams[$id], $this->upgrades[$id], $this->buffers[$id], $this->messages[$id]);
-		assert($this->streams, 'disconnect mastera');
+		if ($id > 0 && $this->streams[$id]) {
+			fclose($this->streams[$id]);
+			if ($this->upgrades[$id])
+				$this->onclose($id);
+			unset($this->streams[$id], $this->upgrades[$id], $this->buffers[$id], $this->messages[$id]);
+		}
 	}
 
 	/**
 	 * Constructs a WebSocket frame for a message/data and desired opcode
 	 */
-	protected function frame(string $message, int $opcode): string {
+	private function frame(string $message, int $opcode): string {
 		$b1 = 0x80 | ($opcode & 0x0f);
 		$length = strlen($message);
 		if ($length < 126)
