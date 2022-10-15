@@ -12,31 +12,31 @@ class PhpSocket {
 	 * Client socket streams
 	 * @var resource[]
 	 */
-	protected $streams;
+	private $streams;
 
 	/**
 	 * Indicates whether connections are upgraded from HTTP to WebSocket
 	 * @var bool[]
 	 */
-	protected $upgrades;
+	private $upgrades;
 
 	/**
 	 * Connections' raw data buffers
 	 * @var string[]
 	 */
-	protected $buffers;
+	private $buffers;
 
 	/**
 	 * Connections' message storages
 	 * @var string[]
 	 */
-	protected $messages;
+	private $messages;
 
 	/**
 	 * Next auto-incrementing connection ID
 	 * @var int
 	 */
-	protected $nextId;
+	private $nextId;
 
 	/**
 	 * Current priority level for logging info
