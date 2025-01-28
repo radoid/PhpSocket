@@ -36,6 +36,7 @@ Your custom logic should be implemented by extending the `PhpSocket` class. It h
 | `onupgrade()` | An upgrade request, that should be either allowed or declined      |
 | `onopen()`    | A connection has been upgraded                                     |
 | `onmessage()` | New data has been received on an upgraded (WebSocket) connection   |
+| `ontimeout()` | The socket has timed out, ie. had no incoming messages for an hour |
 | `onclose()`   | A connection has been terminated                                   |  
 
 During the lifetime of a connection, the following methods are available:

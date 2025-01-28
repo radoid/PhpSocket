@@ -63,7 +63,7 @@ class PhpSocket {
 				die("Certificate $cert has expired.\n");
 		}
 
-		$url = ($cert ? 'ssl://':'')."0.0.0.0:$port";
+		$url = ($cert ? 'ssl://':'') . "0.0.0.0:$port";
 		$context = stream_context_create(['ssl' => [
 				'local_cert' => $cert,
 				'verify_peer' => false,
@@ -84,7 +84,8 @@ class PhpSocket {
 			while ($this->streams) {
 				$this->log('--- '.date('D H:i:s').' -- '.count($this->streams)." sockets ---\n");
 				$changed = $this->streams;
-				if (stream_select($changed, $null, $null, 3600, 0))
+				$count = stream_select($changed, $null, $null, 3600, 0);
+				if ($count > 0) {
 					foreach ($changed as $id => $stream)
 						if ($this->streams)
 							if ($stream == $master)
@@ -95,9 +96,15 @@ class PhpSocket {
 								$this->receiveUpgraded($id, $stream);
 							else
 								$this->receive($id, $stream);
+				} elseif ($count === 0)
+					$this->ontimeout();
+				else {
+					$this->log("stream_select: fail\n", 0);
+					break;
+				}
 			}
 		} catch (Throwable $e) {
-			$this->log($e->getMessage()."\n".$e->getTraceAsString()."\n", 0);
+			$this->log($e->getMessage()."\n" . $e->getTraceAsString()."\n", 0);
 		}
 
 		$this->log('Stopped at '.date('Y-m-d H:i:s').".\n", 0);
@@ -122,13 +129,13 @@ class PhpSocket {
 	 * @param resource $master The master socket stream
 	 */
 	private function accept($master): void {
-		if (($stream = stream_socket_accept($master, 3))) {
+		if (($stream = stream_socket_accept($master, 3, $ipaddr))) {
 			$id = $this->nextId++;
 			$this->streams[$id] = $stream;
 			$this->upgrades[$id] = false;
 			$this->buffers[$id] = $this->messages[$id] = '';
 		} else
-			$this->log("stream_socket_accept: fail\n", 0);
+			$this->log("stream_socket_accept ($ipaddr): fail\n", 0);
 	}
 
 	/**
@@ -137,9 +144,11 @@ class PhpSocket {
 	 */
 	private function receive(int $id, $stream): void {
 		$message = trim(fread($stream, 8192));
-		if (($answer = $this->handshake($message, $uri, $headers, $cookies))) {
-			if (fwrite($stream, $answer)) {
-				$ipaddr = stream_socket_get_name($stream, true);
+		[$protocol, $uri, $headers, $body, $cookies] = $this->parseRequest($message);
+		$ipaddr = stream_socket_get_name($stream, true);
+
+		if (($response = $this->handshake($protocol, $headers))) {
+			if (fwrite($stream, $response)) {
 				if ($this->onupgrade($id, $uri, $headers, $cookies, $ipaddr) !== false) {
 					$this->upgrades[$id] = true;
 					$this->onopen($id);
@@ -215,6 +224,11 @@ class PhpSocket {
 	 * Checks whether the connection is made by a valid user
 	 */
 	protected function onupgrade(int $id, string $uri, array $headers, array $cookies, string $ipaddr): bool { return true; }
+
+	/**
+	 * Fires when there are no connections for a long enough time that `stream_select` times out
+	 */
+	protected function ontimeout(): void {}
 
 	/**
 	 * Fires when a message/data arrives
@@ -310,13 +324,13 @@ class PhpSocket {
 	}
 
 	/**
-	 * Tries to parse the client's initial GET request
+	 * Parses the client's initial HTTP GET request
 	 */
-	private function handshake(string $message, ?string &$uri, ?array &$headers, ?array &$cookies): ?string {
+	private function parseRequest(string $message): ?array {
 		$lines = explode("\n", trim($message));
-		$protocol = "HTTP/1.1";
-		if (preg_match('~^GET (\S+) (\S+)~', $lines[0], $m))
-			[, $uri, $protocol] = $m;
+		if (!preg_match('~^GET (\S+) (\S+)~', $lines[0], $m))
+			return null;
+		[, $uri, $protocol] = $m;
 		$headers = $cookies = [];
 		$body = '';
 		foreach ($lines as $line)
@@ -330,25 +344,22 @@ class PhpSocket {
 			} else
 				$body = trim($line, "\r");
 
-		//$this->log("User-Agent: ".@$headers['User-Agent']."\n", 1);
+		return [$protocol, $uri ?? null, $headers, $body, $cookies];
+	}
 
-		if (($key = @$headers['Sec-WebSocket-Key'])) {
-			$response = base64_encode(pack('H*', sha1($key.'258EAFA5-E914-47DA-95CA-C5AB0DC85B11')));
-			return "$protocol 101 Switching Protocols\r\n".
+	/**
+	 * Tries to prepare an answer to the "handshake"
+	 */
+	private function handshake(string $protocol, array $headers): ?string {
+		if (($key = $headers['Sec-WebSocket-Key'] ?? null)) {
+			$answer = base64_encode(pack('H*', sha1($key.'258EAFA5-E914-47DA-95CA-C5AB0DC85B11')));
+			$response = "$protocol 101 Switching Protocols\r\n".
 					"Upgrade: websocket\r\n".
 					"Connection: Upgrade\r\n".
-					"Sec-WebSocket-Accept: $response\r\n\r\n";
+					"Sec-WebSocket-Accept: $answer\r\n\r\n";
 		}
-		if (($key1 = @$headers['Sec-WebSocket-Key1']) && ($key2 = @$headers['Sec-WebSocket-Key2'])) {
-			$number1 = (int) preg_replace('~\D~', '', $key1) / substr_count($key1, ' ');
-			$number2 = (int) preg_replace('~\D~', '', $key2) / substr_count($key2, ' ');
-			$response = md5(pack('N', $number1) . pack('N', $number2) . $body);
-			return "$protocol 101 Switching Protocols\r\n".
-					"Upgrade: websocket\r\n".
-					"Connection: Upgrade\r\n".
-					"\r\n$response";
-		}
-		return null;
+
+		return $response ?? null;
 	}
 
 	/**
